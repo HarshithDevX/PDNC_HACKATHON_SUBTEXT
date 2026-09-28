@@ -1,0 +1,38 @@
+# Python / cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Temporary project files
+scratch/
+
+# IDE / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Raw / copied datasets - NEVER upload
+data/official/train.csv
+data/official/test.csv
+data/official_raw/
+data/train.csv
+data/test.csv
+data/submission/
+
+# Keep these official reference files
+!data/official/sample_submission.csv
+!data/official/validator.py

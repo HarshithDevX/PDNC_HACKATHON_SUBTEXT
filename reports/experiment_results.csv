@@ -1,0 +1,4 @@
+experiment,context,model,macro_f1,sarcasm_f1,accuracy,best_epoch,checkpoint_path
+A,Response Only,DeBERTa-v3-base,0.7223,0.7428,0.7238,2,C:\Users\donda\.gemini\antigravity-ide\scratch\SUBTEXT\models\checkpoint_exp_a
+B,Parent + Response,DeBERTa-v3-base,0.7094,0.7039,0.7095,3,C:\Users\donda\.gemini\antigravity-ide\scratch\SUBTEXT\models\checkpoint_exp_b
+C,Full Dialogue + Response,DeBERTa-v3-base,0.7115,0.7225,0.7119,2,C:\Users\donda\.gemini\antigravity-ide\scratch\SUBTEXT\models\checkpoint_exp_c

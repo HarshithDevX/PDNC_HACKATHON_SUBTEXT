@@ -1,0 +1,23 @@
+{
+  "model_name": "microsoft/deberta-v3-base",
+  "best_context_configuration": "Response Only",
+  "winning_experiment": "A",
+  "context_strategy": "RESPONSE_ONLY",
+  "best_macro_f1": 0.7223,
+  "best_sarcasm_f1": 0.7428,
+  "best_accuracy": 0.7238,
+  "best_epoch": 2,
+  "best_checkpoint_path": "C:\\Users\\donda\\.gemini\\antigravity-ide\\scratch\\SUBTEXT\\models\\best_model",
+  "device_used": "cuda",
+  "validation_metrics": {
+    "macro_f1": 0.7223,
+    "sarcasm_f1": 0.7428,
+    "accuracy": 0.7238,
+    "confusion_matrix": {
+      "TP": 335,
+      "FP": 155,
+      "TN": 273,
+      "FN": 77
+    }
+  }
+}
