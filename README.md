@@ -1,242 +1,832 @@
-# SUBTEXT — Context-Aware Sarcasm & Irony Detection
+# ◈ SUBTEXT
 
-**Hackathon Challenge 03** • Department of AI & Data Science  
-**Team Cyber Spartans:** P. Dinesh Kumar, Ch. Karthik, M. Sai Koushik Kumar, D. Harshith  
-**Primary Benchmark Metric:** Macro F1  
-**Secondary Benchmark Metrics:** Sarcasm-Class F1, Classification Accuracy  
+### **Context-Aware Sarcasm & Irony Detection**
 
----
+<p align="center">
 
-## 1. Problem Statement
-Sarcasm is fundamentally a pragmatic phenomenon: the intended communicative meaning sharply opposes the literal surface wording. In conversational interactions, an utterance such as *"Oh brilliant job, that was truly a masterpiece of engineering!"* can be completely sincere in one context (e.g. following a successful production launch) and intensely sarcastic in another (e.g. following an untested code deployment that crashed servers).
+**Understand the words. Detect the contradiction. Reveal the SUBTEXT.**
 
-Standard sentiment analysis and isolated sentence classifiers fail catastrophically on sarcasm because they lack discourse grounding. **SUBTEXT** solves this challenge by implementing a context-aware transformer cross-encoder that jointly encodes conversational context and target response, directly modeling pragmatic incongruity.
+</p>
 
----
+<p align="center">
 
-## 2. Dataset Overview & Verification
-The benchmark dataset consists of realistic, conversational social exchanges formatted strictly according to the hackathon specification:
+`AI / NLP` · `Transformers` · `Context Intelligence` · `Hackathon 03`
 
-| Split | Number of Rows | Label Distribution | Target Field |
-| :--- | :--- | :--- | :--- |
-| **Training Set (`train.csv`)** | **4,200** examples | 2,100 `SARCASM` (50.0%)<br>2,100 `NOT_SARCASM` (50.0%) | `label` |
-| **Test Set (`test.csv`)** | **2,000** examples | Unlabeled (Preserved IDs 1 to 2,000) | `prediction` (to generate) |
-
-- **Missing Values:** 0 across all fields.
-- **Duplicate Rows:** 0.
-- **IDs:** Sequentially indexed and preserved 1-to-1 without reordering.
+</p>
 
 ---
 
-## 3. Input Fields
-Each example in the dataset contains three primary text columns:
-1. `parent_context`: The immediate preceding conversational turn to which the target response directly replies.
-2. `full_dialogue_context`: The entire conversational thread history preceding the response, with turns delimited by `[SEP]`.
-3. `response`: The target utterance to be classified as `SARCASM` or `NOT_SARCASM`.
+<div align="center">
+
+### ⚡ CONTEXT CHANGES EVERYTHING
+
+**“Oh brilliant job, that was truly a masterpiece of engineering!”**
+
+**Without context:** Positive
+**With context:** Sarcastic
+
+</div>
 
 ---
 
-## 4. Preprocessing & Normalization
-Text normalization is implemented in `src/preprocessing.py`:
-- Whitespace stripping and multi-space collapsing.
-- Safe turn parsing on `[SEP]` and newline delimiters.
-- Handling of null/empty context fields with graceful fallbacks.
+## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
----
+## ◇ 01 · PROJECT
 
-## 5. Context Construction Strategies & Dialogue Truncation
-We formulate and compare three distinct context representations:
+> **SUBTEXT** is a context-aware sarcasm and irony detection system designed to understand the difference between **what a person says** and **what they actually mean**.
 
-### A. `RESPONSE_ONLY`
-- Formulation: `[CLS] response [SEP]`
-- Purpose: Context-free baseline to quantify the performance gap when conversational context is ignored.
+Traditional sentiment models analyze the surface.
 
-### B. `PARENT_RESPONSE`
-- Formulation: `[CLS] parent_context [SEP] response [SEP]`
-- Purpose: Conditioning on the immediate parent turn.
+SUBTEXT analyzes the **conversation behind the surface**.
 
-### C. `FULL_CONTEXT_RESPONSE` (Final Selected Strategy)
-- Formulation: `[CLS] full_dialogue_context [SEP] response [SEP]`
-- **Intelligent Left-Truncation Policy:**
-  Target responses must never be truncated. When the total conversation thread exceeds the maximum sequence length (128 subword tokens), our truncation policy explicitly drops the oldest dialogue turns first (left-truncation of background context), ensuring the immediate parent utterance and the target response remain intact.
-
----
-
-## 6. Baseline Model (TF-IDF + Logistic Regression)
-To establish a rigorous competitive baseline and support technical defense, we evaluated TF-IDF n-grams (1-2) with Logistic Regression across all three context strategies on a stratified 80/20 validation split (3,360 train / 840 val):
-
-| Baseline Strategy | Validation Macro F1 | Sarcasm F1 | Accuracy |
-| :--- | :---: | :---: | :---: |
-| TF-IDF + LogReg (`RESPONSE_ONLY`) | 0.6594 | 0.6521 | 0.6595 |
-| TF-IDF + LogReg (`PARENT_RESPONSE`) | 0.6655 | 0.6675 | 0.6655 |
-| TF-IDF + LogReg (`FULL_CONTEXT_RESPONSE`) | 0.6351 | 0.6499 | 0.6357 |
-
-*Defense Insight:* Note that for bag-of-words models, adding full dialogue context actually decreases Macro F1 (from 0.6655 down to 0.6351) because word-order and discourse relations are lost in unigram/bigram histograms, introducing noisy keywords. This mathematically proves the necessity of transformer attention mechanisms for multi-turn conversational reasoning.
-
----
-
-## 7. Transformer Architecture (Cross-Encoder)
-Our final model architecture implements a full cross-encoder based on DistilBERT (`distilbert-base-uncased`):
-```
-Conversational Context + Target Response
-                  ↓
-          Hugging Face Tokenizer
-[CLS] context tokens [SEP] response tokens [SEP]
-                  ↓
-       6-Layer Transformer Encoder
-        (Bidirectional Self-Attention)
-                  ↓
-        Pooled [CLS] Representation
-                  ↓
-       Linear Classification Head
-                  ↓
-     Softmax Probabilities [P(0), P(1)]
-                  ↓
-         SARCASM / NOT_SARCASM
-```
-By encoding context and response jointly within a single self-attention sequence, every token in the response directly attends to every token in the preceding conversation, allowing the model to capture pragmatic incongruity.
-
----
-
-## 8. Training Pipeline & Hyperparameters
-- **Optimization:** AdamW optimizer with initial learning rate $2 \times 10^{-5}$, weight decay 0.01.
-- **Warmup:** Linear warmup schedule over the first 10% of training steps.
-- **Batch Size:** 32.
-- **Sequence Length:** 128 subword tokens.
-- **Split:** Stratified 80/20 train/validation split (3,360 train, 840 validation).
-- **Primary Checkpoint Selection:** Checkpoints are evaluated after every epoch and saved based strictly on **Validation Macro F1**, never accuracy alone.
-
----
-
-## 9. Threshold Tuning (Macro F1 Optimization)
-Because the official primary metric is Macro F1, the default 0.50 decision threshold is suboptimal when class distributions or prediction margins vary.
-1. Validation probabilities $P(\text{SARCASM})$ are generated.
-2. Candidate thresholds from $0.20$ to $0.85$ are evaluated in steps of $0.02$.
-3. The threshold maximizing validation Macro F1 is selected and saved in `models/best_model/model_metadata.json`.
-4. This calibrated threshold is consistently applied during test inference.
-
----
-
-## 10. Quantitative Results Comparison
-
-| Model | Context Strategy | Macro F1 (Primary) | Sarcasm F1 | Accuracy |
-| :--- | :--- | :---: | :---: | :---: |
-| **Baseline (TF-IDF + LogReg)** | `RESPONSE_ONLY` | 0.6594 | 0.6521 | 0.6595 |
-| **Baseline (TF-IDF + LogReg)** | `PARENT_RESPONSE` | 0.6655 | 0.6675 | 0.6655 |
-| **Baseline (TF-IDF + LogReg)** | `FULL_CONTEXT_RESPONSE` | 0.6351 | 0.6499 | 0.6357 |
-| **SUBTEXT Transformer** | `FULL_CONTEXT_RESPONSE` | **0.7240** | **0.7310** | **0.7250** |
-
----
-
-## 11. Context Ablation / Impact Study
-For any target response, SUBTEXT experimentally measures the effect of context depth:
-
-```
-Target Response: "Oh brilliant job, that was truly a masterpiece of engineering!"
-
-1. Response Only:
-   Prediction: NOT_SARCASM (Confidence: 68.0%)
-   [Isolated words appear enthusiastic and positive]
-
-2. Parent Context: "The entire payment system crashed for 4 hours."
-   Prediction: SARCASM (Confidence: 86.0%)
-   [Incongruity detected between system crash and praise]
-
-3. Full Context: "Developer pushed code on Friday 5 PM... [SEP] System crashed..."
-   Prediction: SARCASM (Confidence: 92.0%)
-   [Discourse thread reinforces negligence, increasing model confidence]
+```text
+                    ┌──────────────────┐
+                    │    CONVERSATION  │
+                    └────────┬─────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │  CONTEXT EXTRACTION │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+             ┌──────────────────────────────┐
+             │ CONTEXT + TARGET RESPONSE    │
+             └──────────────┬───────────────┘
+                            │
+                            ▼
+                 ╔═══════════════════╗
+                 ║     DISTILBERT    ║
+                 ║  CROSS-ENCODER    ║
+                 ╚════════╤══════════╝
+                          │
+                          ▼
+                 ┌─────────────────┐
+                 │ CONTEXTUAL [CLS]│
+                 └────────┬────────┘
+                          │
+                          ▼
+                   CLASSIFICATION
+                          │
+                 ┌────────┴────────┐
+                 ▼                 ▼
+            SARCASM          NOT SARCASM
 ```
 
 ---
 
-## 12. Error Analysis & Hard-Case Diagnosis
-Saved in `reports/error_analysis.md`. The major error modes identified:
-1. **Shallow Keyword Traps:** Sentences with words like *"obviously"* or *"great"* that are used sincerely rather than sarcastically.
-2. **Sparse Contexts:** Situations where the parent context is under 4 words, reducing the contextual grounding available to detect contrast.
-3. **Subtle Irony:** Dry statements lacking punctuation cues (*"What a surprise."*) requiring nuanced tone representations.
+## ◈ THE CORE IDEA
 
----
+Sarcasm is a **pragmatic phenomenon**.
 
-## 13. Official Test Submission & Validator
-- Generated file: `outputs/submission.csv`
-- Schema: exactly two columns: `id,prediction`
-- Row count: exactly 2,000 predictions
-- IDs: strictly preserved matching `data/test.csv`
-- Labels: strictly `SARCASM` or `NOT_SARCASM`
-- **Organizer Validator:** Validated via `python src/validator.py outputs/submission.csv` (`[VALIDATION PASSED]`).
+The literal meaning of a sentence can be completely different from its intended meaning.
 
----
-
-## 14. Project Directory Structure
+```text
+┌─────────────────────────────────────────────┐
+│ CONTEXT                                     │
+│                                             │
+│ “The payment system crashed for 4 hours.”  │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│ RESPONSE                                    │
+│                                             │
+│ “Brilliant job. Truly a masterpiece.”      │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+                 ╔══════════════╗
+                 ║ INCONGRUITY  ║
+                 ╚══════╤═══════╝
+                        │
+                        ▼
+                 ◆ SARCASM ◆
 ```
+
+SUBTEXT learns this relationship rather than relying only on individual keywords.
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 02 · BENCHMARK
+
+<div align="center">
+
+| ◉ Metric       |     Result |
+| -------------- | ---------: |
+| **Macro F1**   | **0.7240** |
+| **Sarcasm F1** | **0.7310** |
+| **Accuracy**   | **0.7250** |
+
+</div>
+
+### Dataset
+
+```text
+╭──────────────────────────────────────────────╮
+│                 DATASET                      │
+├──────────────────────────────────────────────┤
+│                                              │
+│   TRAINING                  TEST             │
+│                                              │
+│   4,200                     2,000            │
+│   examples                  examples         │
+│                                              │
+│   50% SARCASM               Unlabeled        │
+│   50% NOT_SARCASM           IDs preserved    │
+│                                              │
+╰──────────────────────────────────────────────╯
+```
+
+### Class Distribution
+
+```text
+SARCASM
+
+████████████████████████████████████  2,100
+50.0%
+
+NOT_SARCASM
+
+████████████████████████████████████  2,100
+50.0%
+```
+
+---
+
+# ◇ 03 · WHY SUBTEXT?
+
+### Traditional NLP
+
+```text
+WORDS
+  ↓
+FREQUENCY
+  ↓
+CLASSIFICATION
+```
+
+### SUBTEXT
+
+```text
+WORDS
+  ↓
+CONTEXT
+  ↓
+RELATIONSHIPS
+  ↓
+DISCOURSE
+  ↓
+INCONGRUITY
+  ↓
+INTENT
+  ↓
+CLASSIFICATION
+```
+
+The distinction is simple:
+
+> **Sentiment asks: “Is this positive or negative?”**
+
+> **SUBTEXT asks: “Does this statement make sense literally in this conversation?”**
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 04 · CONTEXT ENGINE
+
+SUBTEXT evaluates three context strategies.
+
+### `01` · RESPONSE_ONLY
+
+```text
+[CLS] response [SEP]
+```
+
+A context-free baseline.
+
+---
+
+### `02` · PARENT_RESPONSE
+
+```text
+[CLS] parent_context [SEP] response [SEP]
+```
+
+Adds the immediate conversational parent.
+
+---
+
+### `03` · FULL_CONTEXT_RESPONSE
+
+```text
+[CLS] full_dialogue_context [SEP] response [SEP]
+```
+
+Uses the complete available conversational history.
+
+**Selected as the final strategy.**
+
+---
+
+## ◇ Intelligent Truncation
+
+Long conversations cannot always fit into the Transformer context window.
+
+SUBTEXT therefore uses a **left-truncation policy**.
+
+```text
+OLDER ─────────────────────────────── NEWER
+
+[TURN 01]  ← REMOVE FIRST
+[TURN 02]  ← REMOVE FIRST
+[TURN 03]
+[TURN 04]
+[PARENT]   ← PRESERVE
+[RESPONSE] ← PRESERVE
+```
+
+Maximum sequence length:
+
+```text
+128 SUBWORD TOKENS
+```
+
+The target response is prioritized and the most recent context is retained.
+
+---
+
+# ◇ 05 · BASELINE
+
+Before introducing Transformers, SUBTEXT establishes a classical baseline.
+
+### TF-IDF + Logistic Regression
+
+| Context Strategy        | Macro F1 | Sarcasm F1 | Accuracy |
+| ----------------------- | -------: | ---------: | -------: |
+| Response Only           |   0.6594 |     0.6521 |   0.6595 |
+| Parent + Response       |   0.6655 |     0.6675 |   0.6655 |
+| Full Context + Response |   0.6351 |     0.6499 |   0.6357 |
+
+### The Important Observation
+
+Full context **hurts** the TF-IDF model.
+
+Why?
+
+Because bag-of-words representations primarily capture:
+
+```text
+WORD FREQUENCY
+```
+
+while sarcasm requires:
+
+```text
+WORD RELATIONSHIP
+        +
+CONTEXT
+        +
+DISCOURSE
+        +
+CONTRADICTION
+```
+
+This motivates the Transformer architecture.
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 06 · TRANSFORMER ENGINE
+
+```text
+                 INPUT
+                   │
+                   ▼
+       ┌───────────────────────┐
+       │ Context + Response    │
+       └───────────┬───────────┘
+                   │
+                   ▼
+       ┌───────────────────────┐
+       │ Hugging Face Tokenizer│
+       └───────────┬───────────┘
+                   │
+                   ▼
+    [CLS] CONTEXT [SEP] RESPONSE [SEP]
+                   │
+                   ▼
+       ╔═══════════════════════╗
+       ║      DISTILBERT       ║
+       ║                       ║
+       ║  6 Transformer Layers ║
+       ║  Bidirectional        ║
+       ║  Self-Attention       ║
+       ╚═══════════╤═══════════╝
+                   │
+                   ▼
+            [CLS] REPRESENTATION
+                   │
+                   ▼
+          ┌─────────────────┐
+          │ Linear Head     │
+          └────────┬────────┘
+                   │
+                   ▼
+              SOFTMAX
+                   │
+          ┌────────┴────────┐
+          ▼                 ▼
+       SARCASM        NOT_SARCASM
+```
+
+### Why Cross-Encoder?
+
+The context and response are processed **inside the same Transformer sequence**.
+
+Therefore:
+
+```text
+Context Token
+      ↕
+Response Token
+      ↕
+Context Token
+      ↕
+Response Token
+```
+
+can directly interact through self-attention.
+
+This enables the model to learn contextual contradictions.
+
+---
+
+# ◇ 07 · TRAINING CONFIGURATION
+
+```text
+╭─────────────────────────────────────────╮
+│            MODEL CONFIGURATION           │
+├─────────────────────────────────────────┤
+│                                          │
+│ Backbone        DistilBERT               │
+│ Optimizer       AdamW                    │
+│ Learning Rate   2 × 10⁻⁵                │
+│ Weight Decay    0.01                     │
+│ Batch Size      32                       │
+│ Sequence       128 tokens                │
+│ Split           80 / 20                  │
+│ Warmup          10% steps                │
+│ Selection       Validation Macro F1      │
+│                                          │
+╰─────────────────────────────────────────╯
+```
+
+The best checkpoint is selected according to **validation Macro F1**, matching the official benchmark objective.
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 08 · THRESHOLD INTELLIGENCE
+
+The standard classification threshold is:
+
+```text
+P(SARCASM) ≥ 0.50
+```
+
+SUBTEXT instead searches for the threshold that maximizes **Macro F1**.
+
+```text
+0.20 ── 0.30 ── 0.40 ── 0.50 ── 0.60 ── 0.70 ── 0.85
+  │       │       │       │       │       │       │
+  └────────────────────────────────────────────────┘
+                         │
+                         ▼
+                 BEST VALIDATION F1
+                         │
+                         ▼
+              SAVED MODEL THRESHOLD
+```
+
+The selected threshold is stored in:
+
+```text
+models/best_model/model_metadata.json
+```
+
+and reused during test inference.
+
+---
+
+# ◇ 09 · RESULTS
+
+### Model Comparison
+
+```text
+                         MACRO F1
+
+TF-IDF / Response        ██████████████████████████░░░  0.6594
+
+TF-IDF / Parent          ███████████████████████████░░  0.6655
+
+TF-IDF / Full Context    █████████████████████████░░░░  0.6351
+
+SUBTEXT Transformer      █████████████████████████████  0.7240
+```
+
+### Final SUBTEXT
+
+| Metric         |      Score |
+| -------------- | ---------: |
+| **Macro F1**   | **0.7240** |
+| **Sarcasm F1** | **0.7310** |
+| **Accuracy**   | **0.7250** |
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 10 · CONTEXT ABLATION
+
+One response.
+
+Three levels of context.
+
+One changing interpretation.
+
+### Target
+
+> **“Oh brilliant job, that was truly a masterpiece of engineering!”**
+
+---
+
+### `01` · Response Only
+
+```text
+Prediction → NOT_SARCASM
+
+Confidence → 68%
+```
+
+The sentence contains strongly positive vocabulary.
+
+---
+
+### `02` · Parent Context
+
+```text
+“The entire payment system crashed for 4 hours.”
+```
+
+```text
+Prediction → SARCASM
+
+Confidence → 86%
+```
+
+The positive response contradicts the negative event.
+
+---
+
+### `03` · Full Conversation
+
+```text
+“Developer pushed code on Friday 5 PM...”
+              ↓
+“System crashed...”
+              ↓
+“Oh brilliant job...”
+```
+
+```text
+Prediction → SARCASM
+
+Confidence → 92%
+```
+
+Additional discourse strengthens the contextual contradiction.
+
+---
+
+# ◇ 11 · ERROR ANALYSIS
+
+SUBTEXT also analyzes difficult examples instead of treating all errors equally.
+
+### `01` · Keyword Traps
+
+Words such as:
+
+```text
+“great”
+“brilliant”
+“obviously”
+```
+
+can appear in genuinely sincere statements.
+
+---
+
+### `02` · Sparse Context
+
+Very short parent messages provide little information for establishing conversational contrast.
+
+---
+
+### `03` · Subtle Irony
+
+Examples such as:
+
+> **“What a surprise.”**
+
+may contain almost no explicit sarcasm markers.
+
+These cases require deeper semantic and pragmatic understanding.
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 12 · SUBMISSION PIPELINE
+
+```text
+TRAIN
+  │
+  ▼
+PREPROCESS
+  │
+  ▼
+BASELINE
+  │
+  ▼
+TRAIN TRANSFORMER
+  │
+  ▼
+VALIDATE
+  │
+  ▼
+THRESHOLD TUNING
+  │
+  ▼
+TEST INFERENCE
+  │
+  ▼
+VALIDATE SUBMISSION
+  │
+  ▼
+submission.csv
+```
+
+### Submission Contract
+
+```text
+outputs/submission.csv
+```
+
+```text
+id,prediction
+1,SARCASM
+2,NOT_SARCASM
+3,SARCASM
+...
+```
+
+Requirements:
+
+* Exactly **2 columns**
+* Exactly **2,000 rows**
+* IDs preserved
+* Labels restricted to:
+
+  * `SARCASM`
+  * `NOT_SARCASM`
+
+Validation:
+
+```bash
+python src/validator.py outputs/submission.csv
+```
+
+```text
+[VALIDATION PASSED]
+```
+
+---
+
+# ◇ 13 · ERROR → EVIDENCE → IMPROVEMENT
+
+SUBTEXT is designed as an experimental system rather than a single model script.
+
+```text
+┌──────────────┐
+│   DATASET    │
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│      EDA     │
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│   BASELINE   │
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│  TRANSFORMER │
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│  ABLATION    │
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│ ERROR STUDY  │
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│ CALIBRATION  │
+└──────┬───────┘
+       ▼
+┌──────────────┐
+│   INFERENCE  │
+└──────────────┘
+```
+
+Every stage produces evidence that informs the next.
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 14 · PROJECT ARCHITECTURE
+
+```text
 SUBTEXT/
-├── data/
-│   ├── train.csv                # Official 4,200 training examples
-│   └── test.csv                 # Official 2,000 test examples
-├── notebooks/
-│   ├── 01_eda.ipynb             # Exploratory Data Analysis
-│   ├── 02_baseline.ipynb        # TF-IDF + Logistic Regression
-│   ├── 03_training.ipynb        # Transformer Model Training
-│   └── 04_evaluation.ipynb      # Threshold Tuning & Submission
-├── src/
-│   ├── config.py                # Centralized hyperparameters & paths
-│   ├── data_loader.py           # Robust dataset ingestion & inspection
-│   ├── preprocessing.py         # Context construction & truncation
-│   ├── dataset.py               # PyTorch Dataset implementation
-│   ├── model.py                 # Cross-encoder transformer architecture
-│   ├── train.py                 # Training pipeline & checkpointing
-│   ├── evaluate.py              # Metrics, threshold tuning, error analysis
-│   ├── inference.py             # Official test submission generator
-│   ├── ablation.py              # Context ablation experiments
-│   ├── evidence.py              # Hard-case extraction & context evidence
-│   ├── validator.py             # Organizer submission schema validator
-│   └── api.py                   # FastAPI prediction service
-├── models/
-│   └── best_model/              # Best checkpoint & model metadata
-├── outputs/
-│   ├── metrics.json             # Model metrics summary
+│
+├── ◇ data/
+│   ├── train.csv
+│   └── test.csv
+│
+├── ◇ notebooks/
+│   ├── 01_eda.ipynb
+│   ├── 02_baseline.ipynb
+│   ├── 03_training.ipynb
+│   └── 04_evaluation.ipynb
+│
+├── ◇ src/
+│   ├── config.py
+│   ├── data_loader.py
+│   ├── preprocessing.py
+│   ├── dataset.py
+│   ├── model.py
+│   ├── train.py
+│   ├── evaluate.py
+│   ├── inference.py
+│   ├── ablation.py
+│   ├── evidence.py
+│   ├── validator.py
+│   └── api.py
+│
+├── ◇ models/
+│   └── best_model/
+│
+├── ◇ outputs/
+│   ├── metrics.json
 │   ├── validation_predictions.csv
-│   ├── test_predictions.csv     # Detailed predictions with probabilities
-│   └── submission.csv           # Official hackathon submission (id,prediction)
-├── reports/
-│   ├── eda_report.md            # Detailed EDA findings
-│   ├── error_analysis.md        # Validation error analysis & hard cases
-│   ├── eda_distributions.png    # EDA visualization plots
-│   └── experiment_results.csv   # Benchmark leaderboard
+│   ├── test_predictions.csv
+│   └── submission.csv
+│
+├── ◇ reports/
+│   ├── eda_report.md
+│   ├── error_analysis.md
+│   ├── eda_distributions.png
+│   └── experiment_results.csv
+│
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## 15. How to Run Everything
+# ◇ 15 · QUICK START
 
-### 1. Run Complete Pipeline (Training, Evaluation & Submission):
+### Install
+
 ```bash
-# 1. Run EDA
+pip install -r requirements.txt
+```
+
+### Run EDA
+
+```bash
 python src/eda.py
+```
 
-# 2. Run Baselines
+### Run Baselines
+
+```bash
 python src/baseline.py
+```
 
-# 3. Train Transformer Model
+### Train SUBTEXT
+
+```bash
 python src/train.py
+```
 
-# 4. Generate Official Test Submission
+### Generate Predictions
+
+```bash
 python src/inference.py
+```
 
-# 5. Run Organizer Validator
+### Validate Submission
+
+```bash
 python src/validator.py outputs/submission.csv
 ```
 
-### 2. Run Backend API:
+---
+
+# ◇ 16 · INTERACTIVE DEMO
+
+SUBTEXT can also be exposed through the prediction API.
+
+### Start API
+
 ```bash
 python src/api.py
 ```
 
-### 3. Run Interactive Demo:
+### Start Frontend
+
 ```bash
 cd ../subtext-app
 npm run dev
 ```
-Open `http://localhost:5173` in your browser.
+
+Then open:
+
+```text
+http://localhost:5173
+```
+
+---
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ◇ 17 · TECHNOLOGY STACK
+
+<div align="center">
+
+`Python` · `PyTorch` · `Hugging Face` · `DistilBERT`
+`Scikit-learn` · `FastAPI` · `React` · `Vite`
+
+</div>
+
+---
+
+# ◇ 18 · THE TAKEAWAY
+
+> ### **Sarcasm isn't always in the sentence.**
+>
+> ### **Sometimes, it's between the sentences.**
+
+SUBTEXT models that space.
+
+```text
+LITERAL WORDS
+      +
+CONVERSATIONAL CONTEXT
+      +
+TRANSFORMER ATTENTION
+      +
+PRAGMATIC INCONGRUITY
+      ↓
+     SUBTEXT
+```
+
+---
+
+<div align="center">
+
+## ◈ SUBTEXT
+
+**Context-Aware Sarcasm & Irony Detection**
+
+### Built by Team Cyber Spartans
+
+**P. Dinesh Kumar · Ch. Karthik · M. Sai Koushik Kumar · D. Harshith**
+
+---
+
+`Hackathon Challenge 03`
+`Department of AI & Data Science`
+
+**Understand the words. Detect the meaning behind them.**
+
+</div>
